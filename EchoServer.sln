@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EchoServer", "EchoServer\EchoServer.csproj", "{5E458CD5-7183-4DB9-B2F8-63A0EC05F428}"
+	ProjectSection(ProjectDependencies) = postProject
+		{ABC41B0E-72FA-45EB-8293-8D83A7747FAF} = {ABC41B0E-72FA-45EB-8293-8D83A7747FAF}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MessageHandlingLibrary", "MessageHandlingLibrary\MessageHandlingLibrary.csproj", "{ABC41B0E-72FA-45EB-8293-8D83A7747FAF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5E458CD5-7183-4DB9-B2F8-63A0EC05F428}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E458CD5-7183-4DB9-B2F8-63A0EC05F428}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E458CD5-7183-4DB9-B2F8-63A0EC05F428}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E458CD5-7183-4DB9-B2F8-63A0EC05F428}.Release|Any CPU.Build.0 = Release|Any CPU
+		{ABC41B0E-72FA-45EB-8293-8D83A7747FAF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ABC41B0E-72FA-45EB-8293-8D83A7747FAF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ABC41B0E-72FA-45EB-8293-8D83A7747FAF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ABC41B0E-72FA-45EB-8293-8D83A7747FAF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2467B9D9-1C2C-4615-9C70-599E78989288}
+	EndGlobalSection
+EndGlobal
