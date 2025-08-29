@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MessageHandlingLibrary
 {
@@ -15,7 +10,7 @@ namespace MessageHandlingLibrary
         public MessageServer()
         {
             IPAddress localAddress = IPAddress.Parse("127.0.0.1");
-            _listener = new TcpListener(localAddress, 8888);
+            _listener = new TcpListener(localAddress, 7777);
         }
 
         public void Start()
@@ -25,7 +20,12 @@ namespace MessageHandlingLibrary
 
         public void Stop()
         {
+            // Safely stop all threads.
+
+            // Close sockets and threads.
             _listener.Stop();
+
+            // Release all unmanages resources.
         }
     }
 }

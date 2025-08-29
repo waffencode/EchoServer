@@ -41,6 +41,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Exceptions\LengthExceededException.cs" />
+    <Compile Include="Exceptions\InvalidDataFormatException.cs" />
     <Compile Include="MessageServer.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

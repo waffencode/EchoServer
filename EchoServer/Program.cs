@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using MessageHandlingLibrary;
 
 namespace EchoServer
@@ -13,10 +9,18 @@ namespace EchoServer
         {
             MessageServer server = new MessageServer();
             server.Start();
-            Console.WriteLine("Server started successfully.");
+            Console.WriteLine("Сервер успешно запущен.");
 
-            server.Stop();
-            Console.WriteLine("Server stopped successfully.");
+            while (true)
+            {   
+                if (Console.ReadKey().Key == ConsoleKey.Enter)
+                {
+                    server.Stop();
+                    Console.WriteLine("Сервер успешно остановлен.");
+                    return;
+                }
+            }
+            
         }
     }
 }
