@@ -5,9 +5,13 @@ namespace EchoServer
 {
     internal class Program
     {
-        public static void Main(string[] args)
+        public static void Main()
         {
             MessageServer server = new MessageServer();
+
+            server.OnClientConnected += ShowClientConnectMessage;
+            server.OnClientDisconnected += ShowClientDisconnectMessage;
+
             server.Start();
             Console.WriteLine("Сервер успешно запущен.");
 
@@ -20,7 +24,16 @@ namespace EchoServer
                     return;
                 }
             }
-            
+        }
+
+        private static void ShowClientConnectMessage(string identity)
+        {
+            Console.WriteLine($"Клиент подключен: {identity}");
+        }
+
+        private static void ShowClientDisconnectMessage(string identity)
+        {
+            Console.WriteLine($"Клиент отключен: {identity}");
         }
     }
 }
