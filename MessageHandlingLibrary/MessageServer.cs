@@ -22,7 +22,7 @@ namespace MessageHandlingLibrary
         /// Событие, вызываемое после отключения клиента.
         /// </summary>
         public event DisconnectEventHandler OnClientDisconnected;
-        public delegate void DisconnectEventHandler(string identity);
+        public delegate void DisconnectEventHandler();
 
         /// <summary>
         /// Событие, вызываемое после получения и успешной обработки сообщения.
@@ -37,8 +37,6 @@ namespace MessageHandlingLibrary
         private readonly Thread _processThread;
 
         private readonly Queue<string> _messageQueue = new Queue<string>();
-
-        //private TcpClient _currentClient;
 
         public MessageServer()
         {
@@ -61,35 +59,42 @@ namespace MessageHandlingLibrary
         /// </summary>
         public void Stop()
         {
-            //_currentClient.Dispose();
             _listener.Stop();
             _acceptThread.Join();
         }
 
         private void AcceptThreadWorker()
         {
-            while (_listener.Server != null)
+            using (TcpClient _currentClient = _listener.AcceptTcpClient())
             {
-                using (TcpClient _currentClient = _listener.AcceptTcpClient())
+                OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
+
+                while (_listener.Server != null)
                 {
-                    OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
-
-                    NetworkStream stream = _currentClient.GetStream();
-                    byte[] _data = new byte[65536];
-
-                    byte lastByte;
-                    int i = 0;
-
-                    do
+                    try
                     {
-                        lastByte = ((byte) stream.ReadByte());
-                        _data[i++] = lastByte;
-                    }
-                    while (lastByte != '\n');
+                        NetworkStream stream = _currentClient.GetStream();
+                        byte[] _data = new byte[65536];
 
-                    string result = Encoding.UTF8.GetString(_data, 0, _data.Length);
-                    _messageQueue.Enqueue(result);
-                    OnMessageReceivedAndProcessed.Invoke(result);
+                        byte lastByte;
+                        int i = 0;
+
+                        do
+                        {
+                            lastByte = ((byte) stream.ReadByte());
+                            _data[i++] = lastByte;
+                        }
+                        while (lastByte != '\n');
+
+                        string result = Encoding.UTF8.GetString(_data, 0, i + 1);
+                        _messageQueue.Enqueue(result);
+                        OnMessageReceivedAndProcessed.Invoke(result);
+                    }
+                    catch (Exception)
+                    {
+                        OnClientDisconnected.Invoke();
+                        break;
+                    }
                 }
             }
         }

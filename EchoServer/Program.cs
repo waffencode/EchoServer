@@ -32,9 +32,9 @@ namespace EchoServer
             Console.WriteLine($"Клиент подключен: {identity}");
         }
 
-        private static void ShowClientDisconnectMessage(string identity)
+        private static void ShowClientDisconnectMessage()
         {
-            Console.WriteLine($"Клиент отключен: {identity}");
+            Console.WriteLine($"Клиент отключен.");
         }
 
         private static void ShowMessageFromClient(string message)
