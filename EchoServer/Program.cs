@@ -11,6 +11,7 @@ namespace EchoServer
 
             server.OnClientConnected += ShowClientConnectMessage;
             server.OnClientDisconnected += ShowClientDisconnectMessage;
+            server.OnMessageReceivedAndProcessed += ShowMessageFromClient;
 
             server.Start();
             Console.WriteLine("Сервер успешно запущен.");
@@ -34,6 +35,11 @@ namespace EchoServer
         private static void ShowClientDisconnectMessage(string identity)
         {
             Console.WriteLine($"Клиент отключен: {identity}");
+        }
+
+        private static void ShowMessageFromClient(string message)
+        {
+            Console.WriteLine($"echo-{message}");
         }
     }
 }

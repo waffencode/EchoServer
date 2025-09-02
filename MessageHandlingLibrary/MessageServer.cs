@@ -1,23 +1,44 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 
 namespace MessageHandlingLibrary
 {
+    /// <summary>
+    /// Представляет многопоточный сервер для обработки сообщений, поступающих от TCP-клиента через сокет.
+    /// </summary>
     public class MessageServer
     {
-        private readonly TcpListener _listener;
-
-        public delegate void ConnectEventHandler(string identity);
+        /// <summary>
+        /// Событие, вызываемое в момент подключения клиента.
+        /// </summary>
         public event ConnectEventHandler OnClientConnected;
+        public delegate void ConnectEventHandler(string identity);
 
-        public delegate void DisconnectEventHandler(string identity);
+        /// <summary>
+        /// Событие, вызываемое после отключения клиента.
+        /// </summary>
         public event DisconnectEventHandler OnClientDisconnected;
+        public delegate void DisconnectEventHandler(string identity);
+
+        /// <summary>
+        /// Событие, вызываемое после получения и успешной обработки сообщения.
+        /// </summary>
+        public event MessageEventHandler OnMessageReceivedAndProcessed;
+        public delegate void MessageEventHandler(string message);
+        
+        private readonly TcpListener _listener;
 
         private readonly Thread _acceptThread;
         private readonly Thread _receiveThread;
         private readonly Thread _processThread;
+
+        private readonly Queue<string> _messageQueue = new Queue<string>();
+
+        //private TcpClient _currentClient;
 
         public MessageServer()
         {
@@ -26,30 +47,61 @@ namespace MessageHandlingLibrary
             _acceptThread = new Thread(AcceptThreadWorker);
         }
 
+        /// <summary>
+        /// Запускает сервер для приёма сообщений и инициализирует потоки обработки сообщений.
+        /// </summary>
         public void Start()
         {
             _listener.Start();
             _acceptThread.Start();
         }
 
-        public void AcceptThreadWorker()
+        /// <summary>
+        /// Останавливает сервер приёма сообщений и безопасно освобождает неуправляемые ресурсы.
+        /// </summary>
+        public void Stop()
+        {
+            //_currentClient.Dispose();
+            _listener.Stop();
+            _acceptThread.Join();
+        }
+
+        private void AcceptThreadWorker()
         {
             while (_listener.Server != null)
             {
-                if (_listener.Pending())
+                using (TcpClient _currentClient = _listener.AcceptTcpClient())
                 {
-                    using (TcpClient tcpClient = _listener.AcceptTcpClient())
+                    OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
+
+                    NetworkStream stream = _currentClient.GetStream();
+                    byte[] _data = new byte[65536];
+
+                    byte lastByte;
+                    int i = 0;
+
+                    do
                     {
-                        OnClientConnected.Invoke(tcpClient.Client.RemoteEndPoint.ToString());
+                        lastByte = ((byte) stream.ReadByte());
+                        _data[i++] = lastByte;
                     }
-                }             
+                    while (lastByte != '\n');
+
+                    string result = Encoding.UTF8.GetString(_data, 0, _data.Length);
+                    _messageQueue.Enqueue(result);
+                    OnMessageReceivedAndProcessed.Invoke(result);
+                }
             }
         }
 
-        public void Stop()
+        private void ReceiveThreadWorker()
         {
-            _listener.Stop();
-            _acceptThread.Join();
+
+        }
+
+        private void ProcessThreadWorker()
+        {
+
         }
     }
 }
