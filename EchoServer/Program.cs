@@ -7,7 +7,7 @@ namespace EchoServer
     {
         public static void Main()
         {
-            MessageServer server = new MessageServer();
+            MessageServer server = new MessageServer("127.0.0.1", 7777);
 
             server.OnClientConnected += ShowClientConnectMessage;
             server.OnClientDisconnected += ShowClientDisconnectMessage;

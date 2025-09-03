@@ -29,20 +29,31 @@ namespace MessageHandlingLibrary
         /// </summary>
         public event MessageEventHandler OnMessageReceivedAndProcessed;
         public delegate void MessageEventHandler(string message);
-        
+
         private readonly TcpListener _listener;
 
         private readonly Thread _acceptThread;
-        private readonly Thread _receiveThread;
+        private Thread _receiveThread;
         private readonly Thread _processThread;
 
         private readonly Queue<string> _messageQueue = new Queue<string>();
 
-        public MessageServer()
+        private ManualResetEvent _stopProcessingThreadEvent = new ManualResetEvent(false);
+        private ManualResetEvent _messageQueueAccessEvent = new ManualResetEvent(false);
+
+        private TcpClient _currentClient;
+
+        /// <summary>
+        /// Инициализирует новый экземпляр сервера сообщений, прослушивающего соединения по указанному адресу и порту.
+        /// </summary>
+        /// <param name="ipString">Строка, содержащая IP-адрес.</param>
+        /// <param name="port">Номер TCP-порта.</param>
+        public MessageServer(string ipString, int port)
         {
-            IPAddress localAddress = IPAddress.Parse("127.0.0.1");
-            _listener = new TcpListener(localAddress, 7777);
+            IPAddress localAddress = IPAddress.Parse(ipString);
+            _listener = new TcpListener(localAddress, port);
             _acceptThread = new Thread(AcceptThreadWorker);
+            _processThread = new Thread(ProcessThreadWorker);
         }
 
         /// <summary>
@@ -52,6 +63,7 @@ namespace MessageHandlingLibrary
         {
             _listener.Start();
             _acceptThread.Start();
+            _processThread.Start();
         }
 
         /// <summary>
@@ -60,53 +72,88 @@ namespace MessageHandlingLibrary
         public void Stop()
         {
             _listener.Stop();
+            _stopProcessingThreadEvent.Set();
+
+            _processThread.Join();
             _acceptThread.Join();
+
+            _currentClient.Close();
         }
 
         private void AcceptThreadWorker()
         {
-            using (TcpClient _currentClient = _listener.AcceptTcpClient())
+            _currentClient = _listener.AcceptTcpClient();
+            
+            OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
+
+            while (_listener.Server != null)
             {
-                OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
-
-                while (_listener.Server != null)
+                try
                 {
-                    try
-                    {
-                        NetworkStream stream = _currentClient.GetStream();
-                        byte[] _data = new byte[65536];
-
-                        byte lastByte;
-                        int i = 0;
-
-                        do
-                        {
-                            lastByte = ((byte) stream.ReadByte());
-                            _data[i++] = lastByte;
-                        }
-                        while (lastByte != '\n');
-
-                        string result = Encoding.UTF8.GetString(_data, 0, i + 1);
-                        _messageQueue.Enqueue(result);
-                        OnMessageReceivedAndProcessed.Invoke(result);
-                    }
-                    catch (Exception)
-                    {
-                        OnClientDisconnected.Invoke();
-                        break;
-                    }
+                    _receiveThread = new Thread(ReceiveThreadWorker);
+                }
+                catch (Exception)
+                {
+                    OnClientDisconnected.Invoke();
+                    break;
                 }
             }
         }
 
         private void ReceiveThreadWorker()
         {
+            while (true)
+            {
+                using (NetworkStream stream = _currentClient.GetStream())
+                {
+                    byte[] _data = new byte[65536];
 
+                    byte lastByte;
+                    int i = 0;
+
+                    do
+                    {
+                        lastByte = ((byte) stream.ReadByte());
+                        _data[i++] = lastByte;
+                    }
+                    while (lastByte != '\n');
+
+                    // count = i, чтобы удалить последний символ переноса строки.
+                    string result = Encoding.UTF8.GetString(_data, 0, i);
+
+                    // Вход в критическую секцию.
+                    _messageQueueAccessEvent.WaitOne();
+
+                    _messageQueue.Enqueue(result);
+
+                    // Выход из критической секции.
+                    _messageQueueAccessEvent.Set();
+                }
+            }
         }
 
         private void ProcessThreadWorker()
         {
+            while (true)
+            {
+                if (_stopProcessingThreadEvent.WaitOne(0))
+                {
+                    break;
+                }
 
+                if (_messageQueue.Count > 0)
+                {
+                    // Вход в критическую секцию.
+                    _messageQueueAccessEvent.WaitOne();
+
+                    string result = _messageQueue.Dequeue();
+
+                    // Выход из критической секции.
+                    _messageQueueAccessEvent.Set();
+
+                    OnMessageReceivedAndProcessed.Invoke(result);
+                }
+            }
         }
     }
 }
