@@ -39,7 +39,10 @@ namespace MessageHandlingLibrary
         private readonly Queue<string> _messageQueue = new Queue<string>();
 
         private ManualResetEvent _stopProcessingThreadEvent = new ManualResetEvent(false);
-        private ManualResetEvent _messageQueueAccessEvent = new ManualResetEvent(false);
+
+        // Сигнальное состояние (true): доступ к очереди разрешен.
+        // Несигнальное состояние (false): доступ к очереди заблокирован.
+        private ManualResetEvent _messageQueueAccessEvent = new ManualResetEvent(true);
 
         private TcpClient _currentClient;
 
@@ -77,7 +80,7 @@ namespace MessageHandlingLibrary
             _processThread.Join();
             _acceptThread.Join();
 
-            _currentClient.Close();
+            _currentClient?.Close();
         }
 
         private void AcceptThreadWorker()
@@ -90,7 +93,11 @@ namespace MessageHandlingLibrary
             {
                 try
                 {
-                    _receiveThread = new Thread(ReceiveThreadWorker);
+                    if ((_receiveThread == null))
+                    {
+                        _receiveThread = new Thread(ReceiveThreadWorker);
+                        _receiveThread.Start();
+                    }
                 }
                 catch (Exception)
                 {
@@ -102,10 +109,13 @@ namespace MessageHandlingLibrary
 
         private void ReceiveThreadWorker()
         {
-            while (true)
+            NetworkStream stream = _currentClient.GetStream();
+
+            try
             {
-                using (NetworkStream stream = _currentClient.GetStream())
+                while (_currentClient.Connected)
                 {
+                    // Буфер размером 64 кБ.
                     byte[] _data = new byte[65536];
 
                     byte lastByte;
@@ -118,8 +128,8 @@ namespace MessageHandlingLibrary
                     }
                     while (lastByte != '\n');
 
-                    // count = i, чтобы удалить последний символ переноса строки.
-                    string result = Encoding.UTF8.GetString(_data, 0, i);
+                    // count = i - 1, чтобы удалить последний символ переноса строки.
+                    string result = Encoding.UTF8.GetString(_data, 0, i - 1);
 
                     // Вход в критическую секцию.
                     _messageQueueAccessEvent.WaitOne();
@@ -129,6 +139,14 @@ namespace MessageHandlingLibrary
                     // Выход из критической секции.
                     _messageQueueAccessEvent.Set();
                 }
+            }
+            catch (Exception)
+            {
+                OnClientDisconnected.Invoke();
+            }
+            finally
+            {
+                stream.Close();
             }
         }
 
