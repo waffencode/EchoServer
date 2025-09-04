@@ -97,23 +97,33 @@ namespace MessageHandlingLibrary
                 {
                     if (_listener.Pending())
                     {
-                        _currentClient = _listener.AcceptTcpClient();
-                        OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
-
-                        // Создаём новый поток, если ReceiveThread ещё не существует или уже завершён.
-                        if (_receiveThread == null || _receiveThread.ThreadState == ThreadState.Stopped)
+                        if (_currentClient == null || !_currentClient.Connected)
                         {
-                            _receiveThread = new Thread(ReceiveThreadWorker);
+                            _currentClient = _listener.AcceptTcpClient();
+                            OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
 
-                            // Доступ к очереди разрешается.
-                            _messageQueueAccessEvent.Set();
+                            // Создаём новый поток, если ReceiveThread ещё не существует или уже завершён.
+                            if (_receiveThread == null || _receiveThread.ThreadState == ThreadState.Stopped)
+                            {
+                                _receiveThread = new Thread(ReceiveThreadWorker);
+
+                                // Доступ к очереди разрешается.
+                                _messageQueueAccessEvent.Set();
+                            }
+
+                            _receiveThread.Start();
                         }
-
-                        _receiveThread.Start();
+                        else
+                        {
+                            using (TcpClient rejectedClient = _listener.AcceptTcpClient())
+                            {
+                                OnThreadException.Invoke("Ошибка: клиент уже подключен, новое подключение невозможно.");
+                                rejectedClient.Close();
+                            }
+                        }
                     }
                     else
                     {
-                        // Короткая пауза для снижения нагрузки на CPU
                         Thread.Sleep(100);
                     }
                 }
