@@ -78,12 +78,12 @@ namespace MessageHandlingLibrary
         /// </summary>
         public void Stop()
         {
-            _listener.Stop();
             _shouldShutdownEvent.Set();
+            _listener.Stop();
 
             _processThread.Join();
             _acceptThread.Join();
-
+            
             _clientWriter?.Close();
             _currentClientNetworkStream?.Close();
             _currentClient?.Close();
@@ -91,21 +91,36 @@ namespace MessageHandlingLibrary
 
         private void AcceptThreadWorker()
         {
-            while (!_shouldShutdownEvent.WaitOne(0))
+            try
             {
-                _currentClient = _listener.AcceptTcpClient();
-                OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
-
-                // Создаём новый поток, если ReceiveThread ещё не существует или уже завершён.
-                if (_receiveThread == null || _receiveThread.ThreadState == ThreadState.Stopped)
+                while (!_shouldShutdownEvent.WaitOne(0))
                 {
-                    _receiveThread = new Thread(ReceiveThreadWorker);
+                    if (_listener.Pending())
+                    {
+                        _currentClient = _listener.AcceptTcpClient();
+                        OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
 
-                    // Доступ к очереди разрешается.
-                    _messageQueueAccessEvent.Set();
+                        // Создаём новый поток, если ReceiveThread ещё не существует или уже завершён.
+                        if (_receiveThread == null || _receiveThread.ThreadState == ThreadState.Stopped)
+                        {
+                            _receiveThread = new Thread(ReceiveThreadWorker);
+
+                            // Доступ к очереди разрешается.
+                            _messageQueueAccessEvent.Set();
+                        }
+
+                        _receiveThread.Start();
+                    }
+                    else
+                    {
+                        // Короткая пауза для снижения нагрузки на CPU
+                        Thread.Sleep(100);
+                    }
                 }
+            }
+            catch (SocketException)
+            {
 
-                _receiveThread.Start();
             }
         }
 
