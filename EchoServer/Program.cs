@@ -12,12 +12,13 @@ namespace EchoServer
             server.OnClientConnected += ShowClientConnectMessage;
             server.OnClientDisconnected += ShowClientDisconnectMessage;
             server.OnMessageReceivedAndProcessed += ShowMessageFromClient;
+            server.OnThreadException += ShowExceptionText;
 
             server.Start();
             Console.WriteLine("Сервер успешно запущен.");
 
             while (true)
-            {   
+            {
                 if (Console.ReadKey().Key == ConsoleKey.Enter)
                 {
                     server.Stop();
@@ -40,6 +41,11 @@ namespace EchoServer
         private static void ShowMessageFromClient(string message)
         {
             Console.WriteLine($"echo-{message}");
+        }
+
+        private static void ShowExceptionText(string message)
+        {
+            Console.WriteLine(message);
         }
     }
 }

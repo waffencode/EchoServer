@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using MessageHandlingLibrary.Exceptions;
 
 namespace MessageHandlingLibrary
 {
@@ -15,20 +16,22 @@ namespace MessageHandlingLibrary
         /// <summary>
         /// Событие, вызываемое в момент подключения клиента.
         /// </summary>
-        public event ConnectEventHandler OnClientConnected;
-        public delegate void ConnectEventHandler(string identity);
+        public event Action<string> OnClientConnected;
 
         /// <summary>
         /// Событие, вызываемое после отключения клиента.
         /// </summary>
-        public event DisconnectEventHandler OnClientDisconnected;
-        public delegate void DisconnectEventHandler();
+        public event Action OnClientDisconnected;
 
         /// <summary>
         /// Событие, вызываемое после получения и успешной обработки сообщения.
         /// </summary>
-        public event MessageEventHandler OnMessageReceivedAndProcessed;
-        public delegate void MessageEventHandler(string message);
+        public event Action<string> OnMessageReceivedAndProcessed;
+
+        /// <summary>
+        /// Событие, вызываемое при возникновении исключения.
+        /// </summary>
+        public event Action<string> OnThreadException;
 
         private readonly TcpListener _listener;
 
@@ -38,13 +41,16 @@ namespace MessageHandlingLibrary
 
         private readonly Queue<string> _messageQueue = new Queue<string>();
 
-        private ManualResetEvent _stopProcessingThreadEvent = new ManualResetEvent(false);
+        // Сигнальное состояние означает завершение работы.
+        private readonly ManualResetEvent _shouldShutdownEvent = new ManualResetEvent(false);
 
-        // Сигнальное состояние (true): доступ к очереди разрешен.
-        // Несигнальное состояние (false): доступ к очереди заблокирован.
-        private ManualResetEvent _messageQueueAccessEvent = new ManualResetEvent(true);
+        // Сигнальное состояние: доступ к очереди разрешён.
+        // Несигнальное состояние: доступ к очереди заблокирован.
+        private readonly ManualResetEvent _messageQueueAccessEvent = new ManualResetEvent(false);
 
         private TcpClient _currentClient;
+
+        private const int MAX_MESSAGE_SIZE = 65536;
 
         /// <summary>
         /// Инициализирует новый экземпляр сервера сообщений, прослушивающего соединения по указанному адресу и порту.
@@ -75,7 +81,7 @@ namespace MessageHandlingLibrary
         public void Stop()
         {
             _listener.Stop();
-            _stopProcessingThreadEvent.Set();
+            _shouldShutdownEvent.Set();
 
             _processThread.Join();
             _acceptThread.Join();
@@ -85,25 +91,20 @@ namespace MessageHandlingLibrary
 
         private void AcceptThreadWorker()
         {
-            _currentClient = _listener.AcceptTcpClient();
-            
-            OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
-
-            while (_listener.Server != null)
+            while (!_shouldShutdownEvent.WaitOne(0))
             {
-                try
+                _currentClient = _listener.AcceptTcpClient();
+                OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
+
+                if (_receiveThread == null || _receiveThread.ThreadState == ThreadState.Stopped)
                 {
-                    if ((_receiveThread == null))
-                    {
-                        _receiveThread = new Thread(ReceiveThreadWorker);
-                        _receiveThread.Start();
-                    }
+                    _receiveThread = new Thread(ReceiveThreadWorker);
+
+                    // Доступ к очереди разрешается.
+                    _messageQueueAccessEvent.Set();
                 }
-                catch (Exception)
-                {
-                    OnClientDisconnected.Invoke();
-                    break;
-                }
+
+                _receiveThread.Start();
             }
         }
 
@@ -116,7 +117,7 @@ namespace MessageHandlingLibrary
                 while (_currentClient.Connected)
                 {
                     // Буфер размером 64 кБ.
-                    byte[] _data = new byte[65536];
+                    byte[] _data = new byte[MAX_MESSAGE_SIZE];
 
                     byte lastByte;
                     int i = 0;
@@ -125,20 +126,33 @@ namespace MessageHandlingLibrary
                     {
                         lastByte = ((byte) stream.ReadByte());
                         _data[i++] = lastByte;
+
+                        if (i >= MAX_MESSAGE_SIZE)
+                        {
+                            throw new LengthExceededException();
+                        }
                     }
                     while (lastByte != '\n');
 
                     // count = i - 1, чтобы удалить последний символ переноса строки.
                     string result = Encoding.UTF8.GetString(_data, 0, i - 1);
 
-                    // Вход в критическую секцию.
+                    // Ожидание возможности доступа к очереди.
                     _messageQueueAccessEvent.WaitOne();
 
                     _messageQueue.Enqueue(result);
 
-                    // Выход из критической секции.
+                    // Установка сигнального состояния - следующий поток может получить доступ.
                     _messageQueueAccessEvent.Set();
                 }
+            }
+            catch (LengthExceededException ex)
+            {
+                OnThreadException.Invoke(ex.Message);
+            }
+            catch (InvalidDataFormatException ex)
+            {
+                OnThreadException.Invoke(ex.Message);
             }
             catch (Exception)
             {
@@ -154,19 +168,19 @@ namespace MessageHandlingLibrary
         {
             while (true)
             {
-                if (_stopProcessingThreadEvent.WaitOne(0))
+                if (_shouldShutdownEvent.WaitOne(0))
                 {
                     break;
                 }
 
                 if (_messageQueue.Count > 0)
                 {
-                    // Вход в критическую секцию.
+                    // Ожидание возможности доступа к очереди.
                     _messageQueueAccessEvent.WaitOne();
 
                     string result = _messageQueue.Dequeue();
 
-                    // Выход из критической секции.
+                    // Установка сигнального состояния - следующий поток может получить доступ.
                     _messageQueueAccessEvent.Set();
 
                     OnMessageReceivedAndProcessed.Invoke(result);
