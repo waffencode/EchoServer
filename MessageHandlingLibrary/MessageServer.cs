@@ -174,9 +174,9 @@ namespace MessageHandlingLibrary
             {
                 OnThreadException.Invoke(ex.Message);
             }
-            catch (InvalidDataFormatException ex)
+            catch (DecoderFallbackException)
             {
-                OnThreadException.Invoke(ex.Message);
+                OnThreadException.Invoke("Ошибка формата: неверный формат данных");
             }
             catch (IOException)
             {
