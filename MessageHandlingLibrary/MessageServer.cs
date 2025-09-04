@@ -120,7 +120,11 @@ namespace MessageHandlingLibrary
             }
             catch (SocketException)
             {
-
+                // SocketException возникает во время завершения работы, поэтому игнорируется.
+            }
+            catch (Exception ex)
+            {
+                OnThreadException.Invoke($"ОШИБКА: {ex.GetType().ToString()} - {ex.Message}");
             }
         }
 
@@ -174,9 +178,13 @@ namespace MessageHandlingLibrary
             {
                 OnThreadException.Invoke(ex.Message);
             }
-            catch (Exception)
+            catch (IOException)
             {
                 OnClientDisconnected.Invoke();
+            }
+            catch (Exception ex)
+            {
+                OnThreadException.Invoke($"ОШИБКА: {ex.GetType().ToString()} - {ex.Message}");
             }
             finally
             {
@@ -186,26 +194,33 @@ namespace MessageHandlingLibrary
 
         private void ProcessThreadWorker()
         {
-            while (true)
+            try
             {
-                if (_shouldShutdownEvent.WaitOne(0))
+                while (true)
                 {
-                    break;
+                    if (_shouldShutdownEvent.WaitOne(0))
+                    {
+                        break;
+                    }
+
+                    if (_messageQueue.Count > 0)
+                    {
+                        // Ожидание возможности доступа к очереди.
+                        _messageQueueAccessEvent.WaitOne();
+
+                        // Вне зависимости от состояния клиента удаляем сообщение из очереди.
+                        string result = _messageQueue.Dequeue();
+
+                        // Установка сигнального состояния - следующий поток может получить доступ.
+                        _messageQueueAccessEvent.Set();
+
+                        SendMessageToClient("echo-" + result);
+                    }
                 }
-
-                if (_messageQueue.Count > 0)
-                {
-                    // Ожидание возможности доступа к очереди.
-                    _messageQueueAccessEvent.WaitOne();
-
-                    // Вне зависимости от состояния клиента удаляем сообщение из очереди.
-                    string result = _messageQueue.Dequeue();
-
-                    // Установка сигнального состояния - следующий поток может получить доступ.
-                    _messageQueueAccessEvent.Set();
-
-                    SendMessageToClient("echo-" + result);
-                }
+            }
+            catch (Exception ex)
+            {
+                OnThreadException.Invoke($"ОШИБКА: {ex.GetType().ToString()} - {ex.Message}");
             }
         }
 
