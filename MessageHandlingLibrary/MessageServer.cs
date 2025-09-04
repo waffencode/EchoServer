@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -24,11 +25,6 @@ namespace MessageHandlingLibrary
         public event Action OnClientDisconnected;
 
         /// <summary>
-        /// Событие, вызываемое после получения и успешной обработки сообщения.
-        /// </summary>
-        public event Action<string> OnMessageReceivedAndProcessed;
-
-        /// <summary>
         /// Событие, вызываемое при возникновении исключения.
         /// </summary>
         public event Action<string> OnThreadException;
@@ -49,6 +45,8 @@ namespace MessageHandlingLibrary
         private readonly ManualResetEvent _messageQueueAccessEvent = new ManualResetEvent(false);
 
         private TcpClient _currentClient;
+        private NetworkStream _currentClientNetworkStream;
+        private StreamWriter _clientWriter;
 
         private const int MAX_MESSAGE_SIZE = 65536;
 
@@ -86,6 +84,8 @@ namespace MessageHandlingLibrary
             _processThread.Join();
             _acceptThread.Join();
 
+            _clientWriter?.Close();
+            _currentClientNetworkStream?.Close();
             _currentClient?.Close();
         }
 
@@ -96,6 +96,7 @@ namespace MessageHandlingLibrary
                 _currentClient = _listener.AcceptTcpClient();
                 OnClientConnected.Invoke(_currentClient.Client.RemoteEndPoint.ToString());
 
+                // Создаём новый поток, если ReceiveThread ещё не существует или уже завершён.
                 if (_receiveThread == null || _receiveThread.ThreadState == ThreadState.Stopped)
                 {
                     _receiveThread = new Thread(ReceiveThreadWorker);
@@ -110,7 +111,8 @@ namespace MessageHandlingLibrary
 
         private void ReceiveThreadWorker()
         {
-            NetworkStream stream = _currentClient.GetStream();
+            _currentClientNetworkStream = _currentClient.GetStream();
+            _clientWriter = new StreamWriter(_currentClientNetworkStream, Encoding.UTF8);
 
             try
             {
@@ -124,8 +126,11 @@ namespace MessageHandlingLibrary
 
                     do
                     {
-                        lastByte = ((byte) stream.ReadByte());
-                        _data[i++] = lastByte;
+                        lastByte = ((byte) _currentClientNetworkStream.ReadByte());
+                        if (lastByte != 255)
+                        {
+                            _data[i++] = lastByte;
+                        }
 
                         if (i >= MAX_MESSAGE_SIZE)
                         {
@@ -160,7 +165,7 @@ namespace MessageHandlingLibrary
             }
             finally
             {
-                stream.Close();
+                _currentClientNetworkStream.Close();
             }
         }
 
@@ -178,14 +183,21 @@ namespace MessageHandlingLibrary
                     // Ожидание возможности доступа к очереди.
                     _messageQueueAccessEvent.WaitOne();
 
+                    // Вне зависимости от состояния клиента удаляем сообщение из очереди.
                     string result = _messageQueue.Dequeue();
 
                     // Установка сигнального состояния - следующий поток может получить доступ.
                     _messageQueueAccessEvent.Set();
 
-                    OnMessageReceivedAndProcessed.Invoke(result);
+                    SendMessageToClient("echo-" + result);
                 }
             }
+        }
+
+        private void SendMessageToClient(string message)
+        {
+            _clientWriter.WriteLine(message);
+            _clientWriter.Flush();
         }
     }
 }
