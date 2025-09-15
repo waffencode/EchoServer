@@ -42,7 +42,7 @@ namespace MessageHandlingLibrary
 
         // Сигнальное состояние: доступ к очереди разрешён.
         // Несигнальное состояние: доступ к очереди заблокирован.
-        private readonly ManualResetEvent _messageQueueAccessEvent = new ManualResetEvent(false);
+        private readonly AutoResetEvent _messageQueueAccessEvent = new AutoResetEvent(true);
 
         private TcpClient _currentClient;
         private NetworkStream _currentClientNetworkStream;
